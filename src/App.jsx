@@ -2,154 +2,133 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
-import "./App.css";
+import "./App.css"; // Your custom styles
+
+const emojis = [
+  "😃", "😂", "😍", "🤯", "😎", "😭", "🤔", "😡", "😴", "🥳",
+  "🫠", "👀", "🙈", "🤪", "🤩", "🥺", "😏", "🤗", "😤", "😇",
+  "💀", "👻", "🍆", "🍑", "💋"
+];
 
 function App() {
   const [session, setSession] = useState(null);
-  const [selectedMood, setSelectedMood] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-
-  const moods = [
-    { emoji: "😊", label: "Happy" },
-    { emoji: "😢", label: "Sad" },
-    { emoji: "😠", label: "Angry" },
-    { emoji: "😌", label: "Chill" },
-    { emoji: "😍", label: "Flirty" },
-    { emoji: "😔", label: "Lonely" },
-    { emoji: "🥵", label: "Hot" },
-    { emoji: "🔥", label: "Horny" },
-    { emoji: "🤯", label: "Mindblown" },
-    { emoji: "😴", label: "Sleepy" },
-    { emoji: "🤓", label: "Nerdy" },
-    { emoji: "🤪", label: "Crazy" },
-    { emoji: "🥳", label: "Celebrating" },
-    { emoji: "😇", label: "Blessed" },
-    { emoji: "😎", label: "Cool" },
-    { emoji: "😱", label: "Scared" },
-    { emoji: "🤠", label: "Adventurous" },
-    { emoji: "😭", label: "Heartbroken" },
-    { emoji: "😤", label: "Motivated" },
-    { emoji: "🍸", label: "Tipsy" },
-    { emoji: "💋", label: "Kinky" },
-    { emoji: "👀", label: "Curious" },
-    { emoji: "👅", label: "Naughty" },
-    { emoji: "🤑", label: "Greedy" },
-    { emoji: "🫦", label: "Seductive" },
-  ];
+  const [selectedEmoji, setSelectedEmoji] = useState("");
 
   useEffect(() => {
-    // Fetch current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    // Listen for auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) =>
+      setSession(session)
+    );
+    return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!session) return;
+    fetchMessages();
+    const messageListener = supabase
+      .channel("realtime messages")
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => fetchMessages())
+      .subscribe();
+    return () => supabase.removeChannel(messageListener);
+  }, [session]);
+
   const fetchMessages = async () => {
-    if (!selectedMood) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("messages")
       .select("*")
-      .eq("mood", selectedMood)
       .order("created_at", { ascending: true });
-    if (error) console.error(error);
-    else setMessages(data);
+    setMessages(data || []);
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !session) return;
-    const { error } = await supabase.from("messages").insert([
-      {
-        user_id: session.user.id,
-        mood: selectedMood,
-        text: newMessage,
-      },
-    ]);
-    if (error) console.error(error);
-    else {
-      setNewMessage("");
-      fetchMessages();
-    }
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage && !selectedEmoji) return;
+    await supabase.from("messages").insert({
+      text: newMessage + selectedEmoji,
+      user_id: session.user.id,
+      mood: selectedEmoji,
+    });
+    setNewMessage("");
+    setSelectedEmoji("");
   };
 
-  useEffect(() => {
-    fetchMessages();
-  }, [selectedMood]);
+  const handleLogout = () => supabase.auth.signOut();
 
-  if (!session)
+  if (!session) {
     return (
-      <div className="auth-container">
-        <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} />
+      <div
+        className="auth-container"
+        style={{
+          backgroundImage: "url('/background.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          minHeight: "100vh",
+        }}
+      >
+        <div className="overlay">
+          <div className="flex justify-center mb-6">
+            <img src="/logo.png" alt="Vibewise Logo" className="h-24 w-24 rounded-full border-4 border-white" />
+          </div>
+          <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} />
+        </div>
       </div>
     );
+  }
 
   return (
-    <div className="app-container">
-      <h1 className="app-title">Vibewise 🔥</h1>
+    <div
+      className="app-container"
+      style={{
+        backgroundImage: "url('/background.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        minHeight: "100vh",
+      }}
+    >
+      <div className="overlay">
+        <header className="flex items-center justify-between p-4 bg-black bg-opacity-50">
+          <img src="/logo.png" alt="Vibewise Logo" className="h-12 w-12 rounded-full border-2 border-white" />
+          <h1 className="text-2xl font-bold text-white">Vibewise Chat 🎉</h1>
+          <button className="logout-btn bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded" onClick={handleLogout}>
+            Logout
+          </button>
+        </header>
 
-      {!selectedMood ? (
-        <div className="mood-picker">
-          <h2 className="section-title">Pick Your Mood</h2>
-          <div className="mood-grid">
-            {moods.map((mood) => (
-              <button
-                key={mood.label}
-                className="mood-button"
-                onClick={() => setSelectedMood(mood.label)}
-              >
-                <span className="mood-emoji">{mood.emoji}</span> {mood.label}
-              </button>
+        <main className="p-4 max-w-2xl mx-auto text-white">
+          <div className="messages space-y-2 mb-4 max-h-[70vh] overflow-y-auto">
+            {messages.map((msg) => (
+              <div key={msg.id} className="message bg-black bg-opacity-30 rounded p-2">
+                <strong>{msg.mood}</strong> {msg.text}
+              </div>
             ))}
           </div>
-        </div>
-      ) : (
-        <div className="chatroom">
-          <h2 className="section-title">Chatroom: {selectedMood}</h2>
-          <div className="messages-box">
-            {messages.length === 0 ? (
-              <p className="empty-message">No messages yet. Be the first!</p>
-            ) : (
-              messages.map((m) => (
-                <div key={m.id} className="message">
-                  <strong>{m.user_id === session.user.id ? "You" : m.user_id}:</strong> {m.text}
-                  <span className="timestamp">
-                    ({new Date(m.created_at).toLocaleTimeString()})
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="input-area">
+
+          <form className="message-form flex gap-2" onSubmit={handleSendMessage}>
             <input
-              className="text-input"
               type="text"
               placeholder="Type your message..."
+              className="flex-grow p-2 rounded text-black"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
             />
-            <button className="send-button" onClick={handleSendMessage}>
-              Send
+            <select
+              className="p-2 rounded text-black"
+              value={selectedEmoji}
+              onChange={(e) => setSelectedEmoji(e.target.value)}
+            >
+              <option value="">😶‍🌫️ Mood</option>
+              {emojis.map((emoji, idx) => (
+                <option key={idx} value={emoji}>{emoji}</option>
+              ))}
+            </select>
+            <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+              Send 🚀
             </button>
-          </div>
-          <div className="actions">
-            <button className="action-button" onClick={() => setSelectedMood(null)}>
-              Change Mood
-            </button>
-            <button className="action-button" onClick={() => supabase.auth.signOut()}>
-              Logout
-            </button>
-          </div>
-        </div>
-      )}
+          </form>
+        </main>
+      </div>
     </div>
   );
 }
